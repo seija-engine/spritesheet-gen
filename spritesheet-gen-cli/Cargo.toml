@@ -1,0 +1,9 @@
+[package]
+name = "spritesheet-gen-cli"
+version = "0.1.0"
+authors = ["yangdao <458424869@qq.com>"]
+edition = "2018"
+
+[dependencies]
+clap = {version = "2.33.0",features = ["yaml"] }
+spritesheet-gen = {path = "../spritesheet-gen"}
