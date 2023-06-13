@@ -8,6 +8,7 @@ fn main() {
                     .arg(Arg::with_name("height").short("h").long("height").value_name("Height").help("image height").required(false))
                     .arg(Arg::with_name("outfile").short("o").long("outfile").value_name("OutFile").help("output file name").required(false))
                     .arg(Arg::with_name("rotation").short("r").long("rotation").value_name("Rotation").help("is rotation").required(false))
+                    .arg(Arg::with_name("padding").short("p").long("padding").value_name("Padding").help("padding size").required(false))
                     .get_matches();
     let dir = matchs.value_of("dir").unwrap_or("./");
     let mut cfg = SpriteSheetGenConfig::default();
@@ -23,6 +24,9 @@ fn main() {
     }
     if let Some(r) = matchs.value_of("rotation") {
         cfg.set_is_rotation(r.parse().unwrap_or(false));   
+    }
+    if let Some(r) = matchs.value_of("padding") {
+        cfg.set_padding(r.parse().unwrap_or(2));   
     }
     sprite_sheet_gen(cfg).unwrap();
 }

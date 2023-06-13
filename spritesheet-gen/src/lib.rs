@@ -9,6 +9,7 @@ pub struct SpriteSheetGenConfig {
     dir:String,
     width:u32,
     height:u32,
+    padding:u32,
     is_rotation:bool,
     write_desc_fn:Box<dyn Fn(&String,&SpriteSheetGenConfig,&Vec<(String,max_rect::Rect)>)>,
     out_file:Option<String>
@@ -21,6 +22,7 @@ impl Default for SpriteSheetGenConfig {
             width: 1024,
             height: 1024,
             is_rotation: false,
+            padding:2,
             write_desc_fn:Box::new(write_default_json),
             out_file: None
         }
@@ -38,6 +40,9 @@ impl SpriteSheetGenConfig {
     pub fn set_is_rotation(&mut self,b:bool) {
         self.is_rotation = b;
     }
+    pub fn set_padding(&mut self,padding:u32) {
+        self.padding = padding;
+    }
     pub fn set_width(&mut self,w:u32) {
         self.width = w;
     }
@@ -51,7 +56,7 @@ impl SpriteSheetGenConfig {
 }
 
 pub fn sprite_sheet_gen(cfg:SpriteSheetGenConfig) -> Result<bool,String> {
-    let mut gen_image:RgbaImage = image::ImageBuffer::new(cfg.width,cfg.height);
+    let mut out_image:RgbaImage = image::ImageBuffer::new(cfg.width,cfg.height);
     let mut max_rect = max_rect::MaxRectsBinPack::new(cfg.width, cfg.height,cfg.is_rotation);
     let read_dir:fs::ReadDir = fs::read_dir(&cfg.dir).map_err(|_| String::from("dir not found"))?;
     let mut writed_list:Vec<(String,max_rect::Rect)> = Vec::new();
@@ -64,17 +69,23 @@ pub fn sprite_sheet_gen(cfg:SpriteSheetGenConfig) -> Result<bool,String> {
           if let Ok(img) = image::open(&path) {
               let mut rgba_image = img.to_rgba();
               let (w,h) = rgba_image.dimensions();
-              let insert_rect = max_rect.insert(w as i32,h as i32,max_rect::FreeRectChoiceHeuristic::BestAreaFit);
+              let padding_w = w  + cfg.padding * 2;
+              let padding_h = h + cfg.padding * 2;
+              let mut insert_rect = max_rect.insert(padding_w as i32,padding_h as i32,max_rect::FreeRectChoiceHeuristic::BestAreaFit);
               if insert_rect.height <= 0 {
                   eprintln!("image to small, can't place {:?}",path);
                   continue;
               }
-              if insert_rect.width != w as i32 {
+              if insert_rect.width != padding_w as i32 {
                 rgba_image = image::imageops::rotate90(&rgba_image);
               }
-              image::imageops::overlay(&mut gen_image, &rgba_image, insert_rect.x as u32, insert_rect.y as u32);
+              image::imageops::overlay(&mut out_image, &rgba_image, insert_rect.x as u32 + cfg.padding, insert_rect.y as u32 + cfg.padding);
               let may_file_name = path.as_path().file_stem().and_then(|os_str| os_str.to_str()).map(|s| String::from(s));
               if let Some(file_name) = may_file_name {
+                insert_rect.x += cfg.padding as i32;
+                insert_rect.y += cfg.padding as i32;
+                insert_rect.width -= (cfg.padding as i32) * 2;
+                insert_rect.height -= (cfg.padding as i32) * 2;
                 writed_list.push((file_name,insert_rect));
               } else {
                 eprintln!("can't get filename {:?}",path);
@@ -84,7 +95,7 @@ pub fn sprite_sheet_gen(cfg:SpriteSheetGenConfig) -> Result<bool,String> {
     }
     let def_name = Path::new(&cfg.dir).file_name().and_then(|os_str| os_str.to_str()).map(|s| String::from(s));
     let out_path = cfg.out_file.clone().unwrap_or(def_name.unwrap_or(String::from("default")));
-    gen_image.save(out_path.clone() + ".png").map_err(|_| String::from("save image error"))?;
+    out_image.save(out_path.clone() + ".png").map_err(|_| String::from("save image error"))?;
     (cfg.write_desc_fn)(&out_path,&cfg,&writed_list);
     Ok(true)
 }
@@ -115,13 +126,11 @@ fn write_default_json(out_path:&String,cfg:&SpriteSheetGenConfig,data_list:&Vec<
 #[cfg(test)]
 mod tests {
     use crate::max_rect::{FreeRectChoiceHeuristic,MaxRectsBinPack};
-    use crate::{sprite_sheet_gen,SpriteSheetGenConfig};
    
-
     #[test]
     fn test_insert() {
         let mut max_rect = MaxRectsBinPack::new(1024,1024, false);
-        let test_data =  [(100,100),(32,32),(50,50),(27,15),(128,45),(1000,198),(44,89)];
+        let test_data =  [(100,100),(32,32),(32,12),(50,50),(27,15),(128,45),(1000,198),(44,89)];
         for tp in test_data.iter() {
             max_rect.insert(tp.0, tp.1, FreeRectChoiceHeuristic::BestAreaFit);
         }
@@ -132,7 +141,7 @@ mod tests {
     fn draw_debug_rect(max_rect:&MaxRectsBinPack) {
         use image::DynamicImage;
         use image::{Rgba};
-        use  image::{GenericImage,GenericImageView};
+        use  image::{GenericImage};
         use imageproc::drawing;
         use imageproc::rect::{Rect};
         let mut new_image = DynamicImage::new_rgba8(max_rect.width(),max_rect.height());

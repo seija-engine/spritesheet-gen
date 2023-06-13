@@ -75,26 +75,25 @@ impl MaxRectsBinPack {
     }
 
     pub fn insert(&mut self,width:i32,height:i32,method:FreeRectChoiceHeuristic) -> Rect {
-        let mut new_node = Rect::default();
         let mut score1 = 0;
         let mut score2 = 0;
-        match method {
+        let new_node = match method {
             FreeRectChoiceHeuristic::BestShortSideFit => {
-                new_node = self.find_best_short_side_fit(width, height,&mut score1,&mut score2);
+                self.find_best_short_side_fit(width, height,&mut score1,&mut score2)
             },
             FreeRectChoiceHeuristic::BottomLeftRule => {
-                new_node = self.find_bottom_left(width, height,&mut score1,&mut score2);
+                self.find_bottom_left(width, height,&mut score1,&mut score2)
             },
             FreeRectChoiceHeuristic::ContactPointRule => {
-                new_node = self.find_contact_point(width, height,&mut score1);
+                self.find_contact_point(width, height,&mut score1)
             },
             FreeRectChoiceHeuristic::BestAreaFit => {
-                new_node = self.find_best_area_fit(width,height,&mut score1,&mut score2);
+                self.find_best_area_fit(width,height,&mut score1,&mut score2)
             },
             FreeRectChoiceHeuristic::BestLongSideFit => {
-                new_node = self.find_best_long_side_fit(width, height,&mut score1,&mut score2);
+                self.find_best_long_side_fit(width, height,&mut score1,&mut score2)
             }
-        }
+        };
         if new_node.height == 0 {
             return new_node;
         }
