@@ -19,7 +19,7 @@ fn main() {
     if let Some(h) = matchs.value_of("height") {
         cfg.set_height(h.parse().unwrap_or(1024));
     }
-    if let Some(out_name) = matchs.value_of("outname") {
+    if let Some(out_name) = matchs.value_of("outfile") {
         cfg.set_out_file(out_name);   
     }
     if let Some(r) = matchs.value_of("rotation") {
