@@ -12,7 +12,8 @@ pub struct SpriteSheetGenConfig {
     padding:u32,
     is_rotation:bool,
     write_desc_fn:Box<dyn Fn(&String,&SpriteSheetGenConfig,&Vec<(String,max_rect::Rect)>)>,
-    out_file:Option<String>
+    out_file:Option<String>,
+    sprite_list:Vec<String>,
 }
 
 impl Default for SpriteSheetGenConfig {
@@ -24,7 +25,8 @@ impl Default for SpriteSheetGenConfig {
             is_rotation: false,
             padding:2,
             write_desc_fn:Box::new(write_default_json),
-            out_file: None
+            out_file: None,
+            sprite_list:vec![]
         }
     }
 }
@@ -53,44 +55,82 @@ impl SpriteSheetGenConfig {
     pub fn set_out_file(&mut self,out_file:&str) {
         self.out_file = Some(String::from(out_file));
     }
+
+    pub fn set_sprite_list(&mut self, sprite_list: Vec<String>) {
+        self.sprite_list = sprite_list;
+    }
+}
+
+fn process_image(
+    path: &Path,
+    out_image: &mut RgbaImage,
+    max_rect: &mut max_rect::MaxRectsBinPack,
+    padding: u32,
+    writed_list: &mut Vec<(String, max_rect::Rect)>
+) {
+    if let Ok(img) = image::open(path) {
+        let mut rgba_image = img.to_rgba();
+        let (w, h) = rgba_image.dimensions();
+        let padding_w = w + padding * 2;
+        let padding_h = h + padding * 2;
+        let mut insert_rect = max_rect.insert(
+            padding_w as i32,
+            padding_h as i32,
+            max_rect::FreeRectChoiceHeuristic::BestAreaFit
+        );
+        if insert_rect.height <= 0 {
+            eprintln!("image to small, can't place {:?}", path);
+            return;
+        }
+        if insert_rect.width != padding_w as i32 {
+            rgba_image = image::imageops::rotate90(&rgba_image);
+        }
+        image::imageops::overlay(
+            out_image,
+            &rgba_image,
+            insert_rect.x as u32 + padding,
+            insert_rect.y as u32 + padding
+        );
+        let may_file_name = path
+            .file_stem()
+            .and_then(|os_str| os_str.to_str())
+            .map(|s| String::from(s));
+        if let Some(file_name) = may_file_name {
+            insert_rect.x += padding as i32;
+            insert_rect.y += padding as i32;
+            insert_rect.width -= (padding as i32) * 2;
+            insert_rect.height -= (padding as i32) * 2;
+            writed_list.push((file_name, insert_rect));
+        } else {
+            eprintln!("can't get filename {:?}", path);
+        }
+    } else {
+        eprintln!("can't open image: {:?}", path);
+    }
 }
 
 pub fn sprite_sheet_gen(cfg:SpriteSheetGenConfig) -> Result<bool,String> {
     let mut out_image:RgbaImage = image::ImageBuffer::new(cfg.width,cfg.height);
     let mut max_rect = max_rect::MaxRectsBinPack::new(cfg.width, cfg.height,cfg.is_rotation);
-    let read_dir:fs::ReadDir = fs::read_dir(&cfg.dir).map_err(|_| String::from("dir not found"))?;
     let mut writed_list:Vec<(String,max_rect::Rect)> = Vec::new();
-    for may_item in read_dir {
-        if let Ok(item) = may_item {
-          let path = item.path();
-          if path.is_dir() {
-              continue;
-          }
-          if let Ok(img) = image::open(&path) {
-              let mut rgba_image = img.to_rgba();
-              let (w,h) = rgba_image.dimensions();
-              let padding_w = w  + cfg.padding * 2;
-              let padding_h = h + cfg.padding * 2;
-              let mut insert_rect = max_rect.insert(padding_w as i32,padding_h as i32,max_rect::FreeRectChoiceHeuristic::BestAreaFit);
-              if insert_rect.height <= 0 {
-                  eprintln!("image to small, can't place {:?}",path);
-                  continue;
-              }
-              if insert_rect.width != padding_w as i32 {
-                rgba_image = image::imageops::rotate90(&rgba_image);
-              }
-              image::imageops::overlay(&mut out_image, &rgba_image, insert_rect.x as u32 + cfg.padding, insert_rect.y as u32 + cfg.padding);
-              let may_file_name = path.as_path().file_stem().and_then(|os_str| os_str.to_str()).map(|s| String::from(s));
-              if let Some(file_name) = may_file_name {
-                insert_rect.x += cfg.padding as i32;
-                insert_rect.y += cfg.padding as i32;
-                insert_rect.width -= (cfg.padding as i32) * 2;
-                insert_rect.height -= (cfg.padding as i32) * 2;
-                writed_list.push((file_name,insert_rect));
-              } else {
-                eprintln!("can't get filename {:?}",path);
-              }
-          }
+    
+    if cfg.sprite_list.is_empty() {
+        // 如果 sprite_list 为空，使用原来的逻辑遍历目录
+        let read_dir:fs::ReadDir = fs::read_dir(&cfg.dir).map_err(|_| String::from("dir not found"))?;
+        for may_item in read_dir {
+            if let Ok(item) = may_item {
+                let path = item.path();
+                if path.is_dir() {
+                    continue;
+                }
+                process_image(&path, &mut out_image, &mut max_rect, cfg.padding, &mut writed_list);
+            }
+        }
+    } else {
+        // 如果 sprite_list 不为空，使用指定的文件列表
+        for sprite_file in &cfg.sprite_list {
+            let path = Path::new(sprite_file);
+            process_image(&path, &mut out_image, &mut max_rect, cfg.padding, &mut writed_list);
         }
     }
     let def_name = Path::new(&cfg.dir).file_name().and_then(|os_str| os_str.to_str()).map(|s| String::from(s));
